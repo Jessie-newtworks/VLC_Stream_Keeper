@@ -81,7 +81,7 @@ def press_space_in_vlc():
         print(f"Command via MPRIS failed: {e}")
 
     # removed since this isn't working with wayland
-    win_id = find_vlc_id()
+    # win_id = find_vlc_id()
     # if not win_id:
     #     print("VLC window not found (is the GUI open?)")
     #     return
