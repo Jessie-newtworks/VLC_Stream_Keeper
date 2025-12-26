@@ -19,7 +19,7 @@ press_space_in_vlc:
 
 Dependencies:
     python3-dbus
-    xdotool
+    xdotool - no longer required on current version
 """
 
 import time
@@ -71,13 +71,20 @@ def find_vlc_id():
 
 
 def press_space_in_vlc():
+    bus = dbus.SessionBus()
+    proxy = bus.get_object("org.mpris.MediaPlayer2", "/org/mpris/MediaPlayer2")
+    player = dbus.Interface(proxy, "org.mpris.MediaPlayer2")
+    player.PlayPause()
+    print("Sent play/pause signal to VLC with MPRIS")
+
+    # removed since this isn't working with wayland
     win_id = find_vlc_id()
-    if not win_id:
-        print("VLC window not found (is the GUI open?)")
-        return
-    subprocess.run(["xdotool", "windowactivate", "--sync", win_id], check=False)
-    subprocess.run(["xdotool", "key", "--window", win_id, "space"], check=False)
-    print("Sent SPACE to VLC")
+    # if not win_id:
+    #     print("VLC window not found (is the GUI open?)")
+    #     return
+    # subprocess.run(["xdotool", "windowactivate", "--sync", win_id], check=False)
+    # subprocess.run(["xdotool", "key", "--window", win_id, "space"], check=False)
+    # print("Sent SPACE to VLC")
 
 
 def main():
