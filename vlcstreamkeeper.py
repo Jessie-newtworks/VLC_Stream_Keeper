@@ -71,11 +71,14 @@ def find_vlc_id():
 
 
 def press_space_in_vlc():
-    bus = dbus.SessionBus()
-    proxy = bus.get_object("org.mpris.MediaPlayer2", "/org/mpris/MediaPlayer2")
-    player = dbus.Interface(proxy, "org.mpris.MediaPlayer2")
-    player.PlayPause()
-    print("Sent play/pause signal to VLC with MPRIS")
+    try:
+        bus = dbus.SessionBus()
+        proxy = bus.get_object("org.mpris.MediaPlayer2.vlc", "/org/mpris/MediaPlayer2")
+        player = dbus.Interface(proxy, "org.mpris.MediaPlayer2.Player")
+        player.PlayPause()
+        print("Sent play/pause signal to VLC with MPRIS")
+    except dbus.exceptions.DBusException as e:
+        print(f"Command via MPRIS failed: {e}")
 
     # removed since this isn't working with wayland
     win_id = find_vlc_id()
