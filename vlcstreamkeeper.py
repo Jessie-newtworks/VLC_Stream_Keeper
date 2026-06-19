@@ -25,20 +25,42 @@ Dependencies:
 import time
 import subprocess
 import dbus #there is an error when this is viewed in pycharm on Windows, can be ignored for linux
+import os
+import signal
+from dotenv import load_dotenv
 
 
 __author__ = ""
 __copyright__ = "Jessie-Newtworks"
 __credits__ = ["Jessie-Newtworks"]
 __license__ = "MIT"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 __maintainer__ = "Jessie-Newtworks"
 __email__ = "via github"
 __status__ = "Alpha"
 
-POLL_TIME = 2
-COOLDOWN_TIME = 10
+load_dotenv()
 
+STREAM_URL = os.getenv("STREAM_URL")
+if not STREAM_URL:
+    raise ValueError("STREAM_URL not found in .env file")
+
+POLL_TIME = int(os.getenv("POLL_TIME"))
+if not POLL_TIME:
+    raise ValueError("POLL_TIME not found in .env file")
+
+COOLDOWN_TIME = int(os.getenv("COOLDOWN_TIME"))
+if not COOLDOWN_TIME:
+    raise ValueError("COOLDOWN_TIME not found in .env file")
+
+VLC_COMMAND = [
+    "vlc",
+    "--fullscreen",
+    "--rtsp-tcp",
+    "--network-caching=3000",
+    "--vout=xcb_x11",
+    STREAM_URL
+]
 
 def get_vlc_status():
     """
@@ -75,20 +97,31 @@ def press_space_in_vlc():
         bus = dbus.SessionBus()
         proxy = bus.get_object("org.mpris.MediaPlayer2.vlc", "/org/mpris/MediaPlayer2")
         player = dbus.Interface(proxy, "org.mpris.MediaPlayer2.Player")
-        player.PlayPause()
+        #player.PlayPause()
+        player.Play()
         print("Sent play/pause signal to VLC with MPRIS")
     except dbus.exceptions.DBusException as e:
         print(f"Command via MPRIS failed: {e}")
 
-    # removed since this isn't working with wayland
-    # win_id = find_vlc_id()
-    # if not win_id:
-    #     print("VLC window not found (is the GUI open?)")
-    #     return
-    # subprocess.run(["xdotool", "windowactivate", "--sync", win_id], check=False)
-    # subprocess.run(["xdotool", "key", "--window", win_id, "space"], check=False)
-    # print("Sent SPACE to VLC")
+def restart_vlc_stream():
+    """
+    Restarts the VLC stream after reoping VLC.
+    Used when VLC reaches EOF, exits, or cannon resume via MPRIS.
+    :return: none
+    """
+    print("Restarting VLC stream...")
 
+    subprocess.run(["pkill","-f", "vlc"], check=False)
+    time.sleep(2)
+
+    subprocess.Popen(
+        VLC_COMMAND,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True
+    )
+
+    print("VLC stream restart command sent")
 
 def main():
     """
@@ -113,8 +146,24 @@ def main():
 
         now = time.time()
 
-        if status != "Playing" and (now - prev_action_time) >= COOLDOWN_TIME:
-            press_space_in_vlc()
+        # if status != "Playing" and (now - prev_action_time) >= COOLDOWN_TIME:
+        #     press_space_in_vlc()
+        #     prev_action_time = now
+
+        if status !="Playing" and (now - prev_action_time) >= COOLDOWN_TIME:
+            try:
+                press_space_in_vlc()
+                time.sleep(5)
+
+                # Recheck status after pressing space
+                new_status = get_vlc_status()
+
+                if new_status != "Playing":
+                    print(f"VLC did not recover; status is {new_status}")
+                    restart_vlc_stream()
+            except Exception as e:
+                print(f"MPRIS recovery failed: {e}")
+                restart_vlc_stream()
             prev_action_time = now
 
         time.sleep(POLL_TIME)
