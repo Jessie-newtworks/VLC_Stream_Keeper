@@ -10,13 +10,14 @@ GUI of the RPI4 and restart the stream ~1-2 days as observed by the author.
 ## Dependencies:  
     python3-dbus  
     xdotool  
+    python3-dotenv  
 ## Requires:
     python 3.x
 
 ## Usage
 ```bash
 apt install -y python3-dbus xdotool
-vlc_keepalive_space.py
+python3 vlcstreamkeeper.py
 ```
 
 ## Version Notes:  
