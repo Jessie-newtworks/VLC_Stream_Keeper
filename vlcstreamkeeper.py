@@ -111,7 +111,7 @@ def restart_vlc_stream():
     """
     print("Restarting VLC stream...")
 
-    subprocess.run(["pkill","-f", "vlc"], check=False)
+    subprocess.run(["pkill","-x", "vlc"], check=False)
     time.sleep(2)
 
     subprocess.Popen(
