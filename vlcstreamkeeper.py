@@ -21,6 +21,8 @@ if it does not exit within a few seconds, so two full-screen windows can
 never fight each other. Repeated relaunches back off exponentially (up to
 MAX_BACKOFF seconds) so a camera that is down does not cause a restart storm.
 
+VLC's own messages go to vlc.log next to this script, emptied at each launch.
+
 Configuration is read from a .env file; see .env.example.
 
 Dependencies:
@@ -44,7 +46,7 @@ __author__ = "Jessie-Newtworks"
 __copyright__ = "Jessie-Newtworks"
 __credits__ = ["Jessie-Newtworks"]
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __maintainer__ = "Jessie-Newtworks"
 __email__ = "via github"
 __status__ = "Alpha"
@@ -61,6 +63,7 @@ STABLE_RESET = 120.0  # seconds of healthy playback before the backoff resets
 PLAY_RECHECK = 5.0  # seconds to wait after sending Play before checking again
 KILL_TIMEOUT = 5.0  # seconds to wait for VLC to exit before force-killing it
 MAX_BACKOFF_STEPS = 16  # caps the exponent so the delay maths cannot overflow
+VLC_LOG_MAX_BYTES = 5 * 1024 * 1024  # vlc.log is emptied when it grows past this
 
 
 # --------------------------------------------------------------------------
@@ -78,6 +81,7 @@ class Config:
     max_backoff: int
     vlc_binary: str
     vlc_vout: str
+    vlc_log: str
 
 
 def env_int(name, default, minimum=1):
@@ -110,7 +114,9 @@ def load_config():
         startup_grace=env_int("STARTUP_GRACE", 20),
         max_backoff=env_int("MAX_BACKOFF", 300),
         vlc_binary=os.getenv("VLC_BINARY", "cvlc").strip() or "cvlc",
-        vlc_vout=os.getenv("VLC_VOUT", "xcb_x11").strip(),
+        vlc_vout=os.getenv("VLC_VOUT", "").strip(),
+        vlc_log=os.getenv("VLC_LOG", os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "vlc.log")).strip(),
     )
 
 
@@ -283,18 +289,22 @@ class Keeper:
     def relaunch(self, reason):
         log.warning("Relaunching VLC: %s", reason)
         self._kill_all()
+        vlc_out = self._open_vlc_log()
         try:
             self.proc = subprocess.Popen(
                 vlc_command(self.cfg),
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=vlc_out,
+                stderr=vlc_out,
                 start_new_session=True,
             )
             log.info("Started %s (pid %d)", self.cfg.vlc_binary, self.proc.pid)
         except OSError as e:
             log.error("Could not start %s: %s", self.cfg.vlc_binary, e)
             self.proc = None
+        finally:
+            if vlc_out is not subprocess.DEVNULL:
+                vlc_out.close()  # VLC keeps its own copy of the file handle
 
         now = time.monotonic()
         delay = min(self.cfg.cooldown_time * 2 ** min(self.failures, MAX_BACKOFF_STEPS),
@@ -309,6 +319,29 @@ class Keeper:
             log.info("Restart #%d in a row; next relaunch allowed in %ds",
                      self.failures, int(delay))
 
+    def _open_vlc_log(self):
+        """Fresh vlc.log for each launch, so VLC's own errors can be read."""
+        if not self.cfg.vlc_log:
+            return subprocess.DEVNULL
+        try:
+            open(self.cfg.vlc_log, "w").close()
+            # Append mode lets _trim_vlc_log empty the file while VLC writes.
+            return open(self.cfg.vlc_log, "a")
+        except OSError as e:
+            log.warning("Cannot write VLC log %s: %s", self.cfg.vlc_log, e)
+            return subprocess.DEVNULL
+
+    def _trim_vlc_log(self):
+        """Keep a VLC stuck in an error loop from filling the SD card."""
+        try:
+            if os.path.getsize(self.cfg.vlc_log) > VLC_LOG_MAX_BYTES:
+                os.truncate(self.cfg.vlc_log, 0)
+                log.warning("vlc.log passed %d MB and was emptied; VLC may be "
+                            "stuck repeating an error",
+                            VLC_LOG_MAX_BYTES // (1024 * 1024))
+        except OSError:
+            pass
+
     def _get_bus(self):
         if self.bus is None:
             self.bus = dbus.SessionBus()
@@ -318,6 +351,8 @@ class Keeper:
 
     def poll(self):
         self._reap()
+        if self.cfg.vlc_log:
+            self._trim_vlc_log()
         now = time.monotonic()
         in_grace = now - self.launched_at < self.cfg.startup_grace
         may_restart = not in_grace and now >= self.next_action_at

@@ -86,18 +86,26 @@ default. The main ones:
 | `MAX_BACKOFF` | 300 | Longest wait between relaunches, in seconds |
 | `STALL_TIMEOUT` | 30 | Seconds without the playback clock moving before the picture counts as frozen |
 | `VLC_BINARY` | cvlc | `cvlc` (no window or menus) or `vlc` |
-| `VLC_VOUT` | xcb_x11 | Video output; leave empty to let VLC pick |
+| `VLC_VOUT` | *(empty)* | Video output; empty lets VLC pick. Don't force `xcb_x11` on a Wayland desktop |
+| `VLC_LOG` | vlc.log next to the script | Where VLC's own messages go |
 
 ## Troubleshooting
-- **Flicker or a black screen on a Wayland desktop:** try `VLC_VOUT=` (empty).
-  Check which session you have with `echo $XDG_SESSION_TYPE` in a desktop
-  terminal.
+- **No picture, or the window flickers between full screen and windowed:**
+  look in `vlc.log`. `xcb vout display error: window not available` means
+  the video output doesn't match the desktop. Leave `VLC_VOUT` empty (the
+  default); current Raspberry Pi OS runs Wayland, where `xcb_x11` fails.
+- **No picture when started over SSH:** VLC doesn't know which screen to
+  use. Start the keeper with `DISPLAY=:0 python3 vlcstreamkeeper.py`. The
+  systemd service sets this for you.
 - **Log says "not answering on D-Bus":** VLC's MPRIS control isn't
   reachable. Make sure the keeper runs as the desktop user, not root or cron.
-- **To see what VLC itself is doing,** set `LOG_LEVEL=DEBUG`, or run the
-  command from `vlc_command()` by hand with `--verbose=2`.
+- **To see what VLC itself is doing,** read `vlc.log`. Blank out the camera
+  URL before sharing it.
 
 ## Version Notes
+0.1.1: Stops forcing the X11 video output, which failed on Wayland and caused
+the full-screen flicker. VLC's own messages are now saved to `vlc.log`.
+
 0.1.0: Relaunches VLC when it exits, enforces a single VLC instance, uses
 cvlc, detects frozen and flickering playback, backs off between restarts,
 validates settings, logs with timestamps, and adds a systemd service.
