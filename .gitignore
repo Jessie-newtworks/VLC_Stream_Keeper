@@ -1,0 +1,17 @@
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+ENV/
+.idea/
+*.iml
+*.pt
+runs/
+output/
+logs/
+*.log

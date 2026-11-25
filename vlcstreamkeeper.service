@@ -1,0 +1,34 @@
+# systemd user service for VLC Stream Keeper.
+#
+# Install (as the desktop user, not root):
+#   mkdir -p ~/.config/systemd/user
+#   cp vlcstreamkeeper.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now vlcstreamkeeper
+#   sudo loginctl enable-linger "$USER"     # start at boot, before anyone logs in
+#
+# Logs:  journalctl --user -u vlcstreamkeeper -f
+#
+# Assumes the repo is cloned to ~/VLC_Stream_Keeper. Change the paths below if not.
+
+[Unit]
+Description=VLC Stream Keeper (keeps an RTSP stream playing full screen)
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/VLC_Stream_Keeper
+ExecStart=/usr/bin/python3 %h/VLC_Stream_Keeper/vlcstreamkeeper.py
+Restart=always
+RestartSec=10
+# Lets the keeper and VLC reach the desktop session.
+# Raspberry Pi OS uses display :0 for both X11 and Wayland (via XWayland).
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=%t/bus
+Environment=PYTHONUNBUFFERED=1
+# Stopping the service leaves VLC playing; the keeper takes it over again
+# when it restarts.
+KillMode=process
+
+[Install]
+WantedBy=default.target
